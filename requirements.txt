@@ -25,3 +25,4 @@ watchdog==6.0.0
 zstandard==0.23.0
 fiona==1.9.3 --find-links https://www.lfd.uci.edu/~gohlke/pythonlibs/
 shapely==2.0.1
+GDAL==3.6.0
