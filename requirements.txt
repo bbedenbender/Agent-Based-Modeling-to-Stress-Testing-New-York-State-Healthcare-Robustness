@@ -8,7 +8,7 @@ GitPython==3.1.44
 markdown-it-py==3.0.0
 matplotlib==3.10.0
 mdurl==0.1.2
-mkl-service==2.4.0
+mkl-service==2.4.2
 munkres==1.1.4
 narwhals==1.21.1
 protobuf==5.29.2
