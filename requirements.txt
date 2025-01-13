@@ -24,3 +24,4 @@ toml==0.10.2
 watchdog==6.0.0
 zstandard==0.23.0
 fiona==1.9.3
+shapely==2.0.1
