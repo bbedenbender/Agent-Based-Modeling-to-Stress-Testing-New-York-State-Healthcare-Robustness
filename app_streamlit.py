@@ -356,7 +356,7 @@ def create_pdf_report(lines, logo=None):
 ##############################################
 # Streamlit App
 ##############################################
-st.title("Agent Based Modeling to Stress Testing New York State Healthcare Robustness (2020 Data)")
+st.title("Agent Based Modeling to Stress Test New York State Healthcare Robustness (2020 Data)")
 
 # Sidebar controls
 infection_rate = st.sidebar.slider("Infection Probability", 0.0, 1.0, 0.25, 0.01)
