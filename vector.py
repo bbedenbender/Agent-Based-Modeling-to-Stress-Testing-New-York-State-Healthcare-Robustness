@@ -157,9 +157,10 @@ def create_agents(ratio=100, seed_county="Albany", seed_infections=10):
     return agent_list
 
 
-def run_one_day(agents, hospitals, infection_rate, base_mortality, travel_mortality_mult, min_ill, max_ill, traveled_count, reinfection_rate):
+def run_one_day(agents, hospitals, infection_rate, base_mortality, travel_mortality_mult, 
+                min_ill, max_ill, traveled_count, reinfection_rate, hospitalization_likelihood):
     """
-    Simulate one day of the model, considering reinfection_rate.
+    Simulate one day of the model, considering reinfection_rate and illness severity.
     """
     # 1) Count infections by county
     county_infection_counts = {cty: 0 for cty in county_gdf['Name']}
@@ -178,15 +179,12 @@ def run_one_day(agents, hospitals, infection_rate, base_mortality, travel_mortal
 
             if exposure > 0:
                 probability = infection_rate * min(1, exposure / 10)
-
                 if agent['Recovered']:
-                    # Reinfection logic
                     probability *= reinfection_rate
-
                 if random.random() < probability:
                     agent['Infected'] = True
                     agent['Days Infected'] = random.randint(min_ill, max_ill)
-                    agent['Recovered'] = False  # reset recovered status upon reinfection
+                    agent['Recovered'] = False
 
     # 3) Update infection duration, check for recovery/death
     for agent in agents:
@@ -198,40 +196,38 @@ def run_one_day(agents, hospitals, infection_rate, base_mortality, travel_mortal
                 if random.random() < eff_mortality:
                     agent['Alive'] = False
                 else:
-                    agent['Recovered'] = True  # agent becomes recovered upon surviving infection
-    
-                # RELEASE BED IF HOSPITALIZED
+                    agent['Recovered'] = True
+
+                # Release bed if hospitalized
                 if agent['Hospitalized']:
                     cty = agent['County']
                     for hidx in hospitals_by_county.get(cty, []):
                         if hospitals.at[hidx, 'Available Beds'] < hospitals.at[hidx, 'TOTAL BEDS, POS']:
                             hospitals.at[hidx, 'Available Beds'] += 1
                             agent['Hospitalized'] = False
-                            break  # release exactly one bed
+                            break
 
-    # 4) Attempt hospital assignment
+    # 4) Attempt hospital assignment based on severity
     for agent in agents:
         if agent['Alive'] and agent['Infected'] and not agent['Hospitalized']:
-            cty = agent['County']
-            if cty not in hospitals_by_county:
-                continue
-            first_attempt = True
-            for hidx in hospitals_by_county[cty]:
-                if hospitals.at[hidx, 'Available Beds'] > 0:
-                    hospitals.at[hidx, 'Available Beds'] -= 1
-                    agent['Hospitalized'] = True
-                    break
-                else:
-                    if first_attempt:
-                        traveled_count += 1
-                        agent['Traveled'] = True
-                    first_attempt = False
+            if random.random() < hospitalization_likelihood:
+                cty = agent['County']
+                first_attempt = True
+                if cty in hospitals_by_county:
+                    for hidx in hospitals_by_county[cty]:
+                        if hospitals.at[hidx, 'Available Beds'] > 0:
+                            hospitals.at[hidx, 'Available Beds'] -= 1
+                            agent['Hospitalized'] = True
+                            break
+                        elif first_attempt:
+                            traveled_count += 1
+                            agent['Traveled'] = True
+                            first_attempt = False
 
     # 5) Recompute hospital occupancy
     update_hospital_occupancy(hospitals)
 
     return agents, hospitals, traveled_count
-
 
 ##############################################
 # County-Level Stats
@@ -406,6 +402,11 @@ if os.path.exists(logo_path):
 
 
 infection_rate = st.sidebar.slider("Agent Infection Probability", 0.0, 1.0, 0.25, 0.01)
+hospitalization_likelihood = st.sidebar.slider(
+    "Illness Severity Requiring Hospitalization (%)", 
+    min_value=0, max_value=100, value=20, step=1
+) / 100  # convert to decimal
+
 reinfection_rate = st.sidebar.select_slider(
     "Agent Reinfection Probability (%)",
     options=[0, 10, 25, 50, 75, 100],
@@ -454,7 +455,7 @@ if run_button:
     county_table_spot = st.empty()
     progress    = st.progress(0)
 
-    for day in range(1, days+1):
+    for day in range(1, days + 1):
         sim_agents, sim_hospitals, traveled_count = run_one_day(
             sim_agents,
             sim_hospitals,
@@ -464,8 +465,10 @@ if run_button:
             illness_time[0],
             illness_time[1],
             traveled_count,
-            reinfection_rate  # pass the new parameter
+            reinfection_rate,
+            hospitalization_likelihood  # <-- pass the new parameter
         )
+
 
         avg_occ = sim_hospitals["Occupancy"].mean()
         occupant_data.append((day, avg_occ))
@@ -494,8 +497,8 @@ if run_button:
             ("Total Deaths", f"{tot_deaths}"),
             ("Travel Mortality Mult", f"{travel_mortality_mult:.1f}"),
             ("Agents Who Traveled for Care", f"{traveled_count}"),
-            ("Percent of Facilities at Full Capacity", f"{fc_count}/{total_fac} ({fc_pct:.1f}%)"),
-            ("Did All Facilities Reach Full Capcity?", f"{all_full}")
+            ("Percent of Facilities Reaching Full Capacity", f"{fc_count}/{total_fac} ({fc_pct:.1f}%)"),
+            ("Did All Facilities Reach Full Capacity?", f"{all_full}")
         ]
         df_summary = pd.DataFrame(summary_lines, columns=["Metric", "Value"])
         summary_spot.table(df_summary)
@@ -524,8 +527,8 @@ if run_button:
         ("Mortality Probability (Base)", f"{base_mortality:.2f}"),
         ("Reinfection Probability", f"{reinfection_rate*100:.0f}%"),  # <-- Added
         ("Agents Who Traveled for Care", f"{traveled_count}"),
-        ("Percent of Facilities at Full Capacity", f"{fc_count}/{total_fac} ({fc_pct:.1f}%)"),
-        ("Did All Facilities Reach Full Capcity?", f"{all_full}")
+        ("Percent of Facilities Reaching Full Capacity", f"{fc_count}/{total_fac} ({fc_pct:.1f}%)"),
+        ("Did All Facilities Reach Full Capacity?", f"{all_full}")
     ]
 
     df_final = pd.DataFrame(final_report_lines, columns=["Metric", "Value"])
