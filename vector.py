@@ -233,11 +233,14 @@ def run_one_day(agents, hospitals, infection_rate, base_mortality, travel_mortal
                 # If no bed found, increment days without care
                 if not bed_found:
                     agent['Days Without Care'] += 1
-                    if not agent['Traveled']:
-                        agent['Traveled'] = True
-                        traveled_count += 1
+                    # Always count each travel attempt
+                    traveled_count += 1
+                    # Optionally track individual attempts
+                    agent['travel_attempts'] = agent.get('travel_attempts', 0) + 1
                 else:
-                    agent['Days Without Care'] = 0  # Reset counter if care found
+                    agent['Days Without Care'] = 0  # Reset counter if care is found, but do not decrement traveled_count
+
+
 
     # 5) Recompute hospital occupancy
     update_hospital_occupancy(hospitals)
