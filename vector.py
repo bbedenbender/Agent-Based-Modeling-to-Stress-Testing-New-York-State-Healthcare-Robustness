@@ -158,9 +158,10 @@ def create_agents(ratio=100, seed_county="Albany", seed_infections=10):
 
 
 def run_one_day(agents, hospitals, infection_rate, base_mortality, travel_mortality_mult, 
-                min_ill, max_ill, traveled_count, reinfection_rate, hospitalization_likelihood):
+                min_ill, max_ill, traveled_count, trip_count, reinfection_rate, hospitalization_likelihood):
     """
     Simulate one day of the model, considering reinfection_rate and illness severity.
+    Returns agents, hospitals, traveled_count, and trip_count.
     """
     # 1) Count infections by county
     county_infection_counts = {cty: 0 for cty in county_gdf['Name']}
@@ -176,7 +177,6 @@ def run_one_day(agents, hospitals, infection_rate, base_mortality, travel_mortal
             exposure = county_infection_counts.get(cty, 0)
             for neighbor in neighbors:
                 exposure += county_infection_counts.get(neighbor, 0)
-
             if exposure > 0:
                 probability = infection_rate * min(1, exposure / 10)
                 if agent['Recovered']:
@@ -200,28 +200,25 @@ def run_one_day(agents, hospitals, infection_rate, base_mortality, travel_mortal
 
                 # Release bed if hospitalized: use admitted county if available.
                 if agent['Hospitalized']:
-                    # Use admitted county if it exists; otherwise default to agent's home county.
                     release_county = agent.get('AdmittedCounty', agent['County'])
                     for hidx in hospitals_by_county.get(release_county, []):
                         if hospitals.at[hidx, 'Available Beds'] < hospitals.at[hidx, 'TOTAL BEDS, POS']:
                             hospitals.at[hidx, 'Available Beds'] += 1
                             agent['Hospitalized'] = False
-                            # Clear the admitted county field after releasing the bed.
+                            # Clear admitted county field after releasing bed.
                             agent.pop('AdmittedCounty', None)
                             break
-
 
     # 4) Attempt hospital assignment based on severity
     for agent in agents:
         if agent['Alive'] and agent['Infected'] and not agent['Hospitalized']:
-            # Only agents needing hospitalization (based on hospitalization_likelihood) will search.
             if random.random() < hospitalization_likelihood:
-                # Create a list of candidate counties: home county plus neighbors.
+                # Create list of candidate counties: home county plus neighbors.
                 candidate_counties = [agent['County']] + county_neighbors.get(agent['County'], [])
                 bed_found = False
                 max_attempts = 5  # Maximum search attempts per day.
                 attempt = 0
-                admitted_county = None  # Track which county admitted the agent.
+                admitted_county = None
                 while not bed_found and attempt < max_attempts:
                     for cty in candidate_counties:
                         if cty in hospitals_by_county:
@@ -236,30 +233,32 @@ def run_one_day(agents, hospitals, infection_rate, base_mortality, travel_mortal
                                 break
                     attempt += 1
 
-                # Count unsuccessful trips:
+                # Count unsuccessful trips for this day.
+                # If a bed is found, subtract one attempt (the successful one) from the total.
                 if bed_found:
-                    # The successful attempt isn't counted as unsuccessful.
                     unsuccessful_attempts = attempt - 1
                 else:
                     unsuccessful_attempts = attempt
 
-                # Update the agent's unsuccessful trips counter.
+                # Update the agent's individual unsuccessful trips counter.
                 agent['UnsuccessfulTrips'] = agent.get('UnsuccessfulTrips', 0) + unsuccessful_attempts
 
-                # If a bed is found in a county that is not the agent's home county, count it as travel.
-                if bed_found and admitted_county != agent['County']:
-                    if not agent['Traveled']:
-                        traveled_count += 1
-                        agent['Traveled'] = True
-                    # Optionally record where the agent was admitted.
+                # Also update the global trip count.
+                trip_count += unsuccessful_attempts
+
+                # If a bed is found in a county different from the agent's home county, count as travel.
+                if bed_found:
+                    if admitted_county != agent['County']:
+                        if not agent['Traveled']:
+                            traveled_count += 1
+                            agent['Traveled'] = True
+                    # Record the admitting county.
                     agent['AdmittedCounty'] = admitted_county
-
-
 
     # 5) Recompute hospital occupancy
     update_hospital_occupancy(hospitals)
 
-    return agents, hospitals, traveled_count
+    return agents, hospitals, traveled_count, trip_count
 
 ##############################################
 # County-Level Stats
@@ -486,6 +485,8 @@ if run_button:
     summary_spot= st.empty()
     county_table_spot = st.empty()
     progress    = st.progress(0)
+    traveled_count = 0
+    trip_count = 0
 
     for day in range(1, days + 1):
         sim_agents, sim_hospitals, traveled_count = run_one_day(
@@ -498,7 +499,7 @@ if run_button:
             illness_time[1],
             traveled_count,
             reinfection_rate,
-            hospitalization_likelihood  # <-- pass the new parameter
+            hospitalization_likelihood  
         )
 
 
