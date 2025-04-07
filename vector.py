@@ -210,32 +210,35 @@ def run_one_day(agents, hospitals, infection_rate, base_mortality, travel_mortal
     # 4) Attempt hospital assignment based on severity
     for agent in agents:
         if agent['Alive'] and agent['Infected'] and not agent['Hospitalized']:
-            # Only agents who are severe enough (per hospitalization_likelihood) need to be hospitalized.
+            # Only agents needing hospitalization (based on hospitalization_likelihood) will search.
             if random.random() < hospitalization_likelihood:
-                # Define candidate counties: agent's county plus its neighbors.
+                # Create a list of candidate counties: home county plus neighbors.
                 candidate_counties = [agent['County']] + county_neighbors.get(agent['County'], [])
                 bed_found = False
+                max_attempts = 5  # Maximum search attempts per day.
                 attempt = 0
-                max_attempts = 3  # Maximum number of search attempts in one day.
+                admitted_county = None  # Track which county admitted the agent.
                 while not bed_found and attempt < max_attempts:
-                    # Loop over each candidate county
                     for cty in candidate_counties:
                         if cty in hospitals_by_county:
-                            # Check each hospital in that county
                             for hidx in hospitals_by_county[cty]:
                                 if hospitals.at[hidx, 'Available Beds'] > 0:
                                     hospitals.at[hidx, 'Available Beds'] -= 1
                                     agent['Hospitalized'] = True
                                     bed_found = True
+                                    admitted_county = cty  # Record the county where the bed was found.
                                     break
                             if bed_found:
                                 break
                     attempt += 1
-                # If no bed was found after max_attempts, update travel info (counting each unique agent only once)
-                if not bed_found:
+                # If a bed is found in a county that is not the agent's home county, count it as travel.
+                if bed_found and admitted_county != agent['County']:
                     if not agent['Traveled']:
                         traveled_count += 1
                         agent['Traveled'] = True
+                # Otherwise, if no bed is found, you might choose to update travel attempts or leave it for the next day.
+
+
 
     # 5) Recompute hospital occupancy
     update_hospital_occupancy(hospitals)
