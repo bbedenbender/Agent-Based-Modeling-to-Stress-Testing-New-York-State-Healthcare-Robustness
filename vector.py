@@ -466,7 +466,7 @@ if run_button:
             illness_time[1],
             traveled_count,
             reinfection_rate,
-            hospitalization_likelihood  # <-- pass the new parameter
+            hospitalization_likelihood 
         )
 
 
