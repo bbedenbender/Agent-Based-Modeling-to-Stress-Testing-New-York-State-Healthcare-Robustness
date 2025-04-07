@@ -489,7 +489,7 @@ if run_button:
     trip_count = 0
 
     for day in range(1, days + 1):
-        sim_agents, sim_hospitals, traveled_count = run_one_day(
+        sim_agents, sim_hospitals, traveled_count, trip_count = run_one_day(
             sim_agents,
             sim_hospitals,
             infection_rate,
@@ -498,9 +498,11 @@ if run_button:
             illness_time[0],
             illness_time[1],
             traveled_count,
+            trip_count,
             reinfection_rate,
             hospitalization_likelihood  
         )
+
 
 
         avg_occ = sim_hospitals["Occupancy"].mean()
