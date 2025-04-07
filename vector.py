@@ -532,9 +532,11 @@ if run_button:
             ("Total Deaths", f"{tot_deaths}"),
             ("Travel Mortality Mult", f"{travel_mortality_mult:.1f}"),
             ("Agents Who Traveled for Care", f"{traveled_count}"),
+            ("Total Agent Trips", f"{trip_count}"),  # New metric added here
             ("Percent of Facilities Reaching Full Capacity", f"{fc_count}/{total_fac} ({fc_pct:.1f}%)"),
             ("Did All Facilities Reach Full Capacity?", f"{all_full}")
         ]
+
         df_summary = pd.DataFrame(summary_lines, columns=["Metric", "Value"])
         summary_spot.table(df_summary)
 
