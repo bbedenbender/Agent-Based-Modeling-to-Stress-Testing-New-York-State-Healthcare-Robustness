@@ -146,8 +146,7 @@ def create_agents(ratio=100, seed_county="Albany", seed_infections=10):
                 'Hospitalized': False,
                 'Alive': True,
                 'Traveled': False,
-                'Recovered': False,
-                'Days Without Care': 0  
+                'Recovered': False  # <-- NEW ATTRIBUTE
             })
         if cty_name == seed_county:
             infected_indices = random.sample(range(len(agents_in_county)), min(seed_infections, len(agents_in_county)))
@@ -156,7 +155,6 @@ def create_agents(ratio=100, seed_county="Albany", seed_infections=10):
                 agents_in_county[idx]['Days Infected'] = random.randint(6, 10)
         agent_list.extend(agents_in_county)
     return agent_list
-
 
 
 def run_one_day(agents, hospitals, infection_rate, base_mortality, travel_mortality_mult, 
@@ -194,16 +192,13 @@ def run_one_day(agents, hospitals, infection_rate, base_mortality, travel_mortal
             agent['Days Infected'] -= 1
             if agent['Days Infected'] <= 0:
                 agent['Infected'] = False
-    
-                # Mortality increases daily if care was not found
-                eff_mortality = base_mortality * (travel_mortality_mult ** agent['Days Without Care'])
-    
+                eff_mortality = base_mortality * (travel_mortality_mult if agent['Traveled'] else 1.0)
                 if random.random() < eff_mortality:
                     agent['Alive'] = False
                 else:
                     agent['Recovered'] = True
-    
-                # Release hospital bed if hospitalized
+
+                # Release bed if hospitalized
                 if agent['Hospitalized']:
                     cty = agent['County']
                     for hidx in hospitals_by_county.get(cty, []):
@@ -212,35 +207,22 @@ def run_one_day(agents, hospitals, infection_rate, base_mortality, travel_mortal
                             agent['Hospitalized'] = False
                             break
 
-
     # 4) Attempt hospital assignment based on severity
     for agent in agents:
         if agent['Alive'] and agent['Infected'] and not agent['Hospitalized']:
             if random.random() < hospitalization_likelihood:
                 cty = agent['County']
-                counties_to_check = [cty] + county_neighbors.get(cty, [])
-                bed_found = False
-                for check_cty in counties_to_check:
-                    for hidx in hospitals_by_county.get(check_cty, []):
+                first_attempt = True
+                if cty in hospitals_by_county:
+                    for hidx in hospitals_by_county[cty]:
                         if hospitals.at[hidx, 'Available Beds'] > 0:
                             hospitals.at[hidx, 'Available Beds'] -= 1
                             agent['Hospitalized'] = True
-                            agent['County'] = check_cty
-                            bed_found = True
                             break
-                    if bed_found:
-                        break
-                # If no bed found, increment days without care
-                if not bed_found:
-                    agent['Days Without Care'] += 1
-                    # Always count each travel attempt
-                    traveled_count += 1
-                    # Optionally track individual attempts
-                    agent['travel_attempts'] = agent.get('travel_attempts', 0) + 1
-                else:
-                    agent['Days Without Care'] = 0  # Reset counter if care is found, but do not decrement traveled_count
-
-
+                        elif first_attempt:
+                            traveled_count += 1
+                            agent['Traveled'] = True
+                            first_attempt = False
 
     # 5) Recompute hospital occupancy
     update_hospital_occupancy(hospitals)
