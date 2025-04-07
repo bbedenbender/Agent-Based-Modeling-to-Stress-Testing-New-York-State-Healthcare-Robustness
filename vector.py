@@ -145,10 +145,8 @@ def create_agents(ratio=100, seed_county="Albany", seed_infections=10):
                 'Days Infected': 0,
                 'Hospitalized': False,
                 'Alive': True,
-                'Traveled': False,           # Flag to mark if agent has traveled (for unique count)
-                'Recovered': False,
-                'requires_hospitalization': False,  # Set when infection occurs if care is needed
-                'travel_attempts': 0         # Count each day the agent attempts travel
+                'Traveled': False,
+                'Recovered': False  # <-- NEW ATTRIBUTE
             })
         if cty_name == seed_county:
             infected_indices = random.sample(range(len(agents_in_county)), min(seed_infections, len(agents_in_county)))
@@ -162,7 +160,7 @@ def create_agents(ratio=100, seed_county="Albany", seed_infections=10):
 def run_one_day(agents, hospitals, infection_rate, base_mortality, travel_mortality_mult, 
                 min_ill, max_ill, traveled_count, reinfection_rate, hospitalization_likelihood):
     """
-    Simulate one day of the model.
+    Simulate one day of the model, considering reinfection_rate and illness severity.
     """
     # 1) Count infections by county
     county_infection_counts = {cty: 0 for cty in county_gdf['Name']}
@@ -178,6 +176,7 @@ def run_one_day(agents, hospitals, infection_rate, base_mortality, travel_mortal
             exposure = county_infection_counts.get(cty, 0)
             for neighbor in neighbors:
                 exposure += county_infection_counts.get(neighbor, 0)
+
             if exposure > 0:
                 probability = infection_rate * min(1, exposure / 10)
                 if agent['Recovered']:
@@ -186,9 +185,6 @@ def run_one_day(agents, hospitals, infection_rate, base_mortality, travel_mortal
                     agent['Infected'] = True
                     agent['Days Infected'] = random.randint(min_ill, max_ill)
                     agent['Recovered'] = False
-                    # Decide if the agent will require hospitalization
-                    if random.random() < hospitalization_likelihood:
-                        agent['requires_hospitalization'] = True
 
     # 3) Update infection duration, check for recovery/death
     for agent in agents:
@@ -196,11 +192,7 @@ def run_one_day(agents, hospitals, infection_rate, base_mortality, travel_mortal
             agent['Days Infected'] -= 1
             if agent['Days Infected'] <= 0:
                 agent['Infected'] = False
-                # Apply travel multiplier if the agent has attempted to travel
-                if agent.get('travel_attempts', 0) > 0:
-                    eff_mortality = base_mortality * travel_mortality_mult
-                else:
-                    eff_mortality = base_mortality
+                eff_mortality = base_mortality * (travel_mortality_mult if agent['Traveled'] else 1.0)
                 if random.random() < eff_mortality:
                     agent['Alive'] = False
                 else:
@@ -215,31 +207,27 @@ def run_one_day(agents, hospitals, infection_rate, base_mortality, travel_mortal
                             agent['Hospitalized'] = False
                             break
 
-    # 4) Attempt hospital assignment for agents needing care
+    # 4) Attempt hospital assignment based on severity
     for agent in agents:
         if agent['Alive'] and agent['Infected'] and not agent['Hospitalized']:
-            if agent.get('requires_hospitalization', False):
+            if random.random() < hospitalization_likelihood:
                 cty = agent['County']
-                bed_found = False
+                first_attempt = True
                 if cty in hospitals_by_county:
                     for hidx in hospitals_by_county[cty]:
                         if hospitals.at[hidx, 'Available Beds'] > 0:
                             hospitals.at[hidx, 'Available Beds'] -= 1
                             agent['Hospitalized'] = True
-                            bed_found = True
                             break
-                if not bed_found:
-                    # Count a unique travel attempt for each agent only once.
-                    if not agent['Traveled']:
-                        traveled_count += 1
-                        agent['Traveled'] = True
-                    # Increment travel attempts regardless, for travel multiplier purposes.
-                    agent['travel_attempts'] += 1
+                        elif first_attempt:
+                            traveled_count += 1
+                            agent['Traveled'] = True
+                            first_attempt = False
 
     # 5) Recompute hospital occupancy
     update_hospital_occupancy(hospitals)
-    return agents, hospitals, traveled_count
 
+    return agents, hospitals, traveled_count
 
 ##############################################
 # County-Level Stats
